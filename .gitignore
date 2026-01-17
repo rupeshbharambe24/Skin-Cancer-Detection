@@ -1,1 +1,7 @@
 data/
+__python_cache__/
+*.pyc
+*.pyo
+*.pyd   
+env/
+venv/
