@@ -1,0 +1,157 @@
+from __future__ import annotations
+
+import io
+from pathlib import Path
+from typing import Dict, Optional, Tuple
+
+import numpy as np
+import torch
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from PIL import Image
+from torchvision import transforms
+
+from model_registry import ModelSpec, count_parameters, get_model_specs
+
+app = FastAPI(title="Vision Studio Backend", version="1.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+MODEL_SPECS: Dict[str, ModelSpec] = {spec.key: spec for spec in get_model_specs()}
+MODEL_CACHE: Dict[Tuple[str, str], torch.nn.Module] = {}
+
+
+def build_transform(spec: ModelSpec) -> transforms.Compose:
+    return transforms.Compose(
+        [
+            transforms.Resize((spec.input_size, spec.input_size)),
+            transforms.ToTensor(),
+            transforms.Normalize(spec.norm_mean, spec.norm_std),
+        ]
+    )
+
+
+def resolve_device(requested: str) -> torch.device:
+    if requested == "cuda" and torch.cuda.is_available():
+        return torch.device("cuda")
+    return torch.device("cpu")
+
+
+def load_model(spec: ModelSpec, device: torch.device) -> torch.nn.Module:
+    cache_key = (spec.key, device.type)
+    if cache_key in MODEL_CACHE:
+        return MODEL_CACHE[cache_key]
+    if not spec.weights_path.exists():
+        raise FileNotFoundError(str(spec.weights_path))
+    model = spec.builder()
+    state = torch.load(spec.weights_path, map_location="cpu")
+    model.load_state_dict(state)
+    model.to(device)
+    model.eval()
+    MODEL_CACHE[cache_key] = model
+    return model
+
+
+def clear_cache(model_id: Optional[str] = None) -> None:
+    if model_id is None:
+        MODEL_CACHE.clear()
+        return
+    keys = [key for key in MODEL_CACHE if key[0] == model_id]
+    for key in keys:
+        MODEL_CACHE.pop(key, None)
+
+
+@app.get("/api/health")
+def health() -> Dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/")
+def root() -> Dict[str, str]:
+    return {
+        "status": "backend_running",
+        "frontend": "http://127.0.0.1:5173",
+        "docs": "http://127.0.0.1:8000/docs",
+    }
+
+
+@app.get("/api/models")
+def list_models() -> Dict[str, list]:
+    items = []
+    for spec in MODEL_SPECS.values():
+        model = spec.builder()
+        items.append(
+            {
+                "id": spec.key,
+                "name": spec.name,
+                "params": count_parameters(model),
+                "input_size": spec.input_size,
+                "class_names": spec.class_names,
+                "weights_path": str(spec.weights_path),
+                "weights_found": spec.weights_path.exists(),
+            }
+        )
+    return {"models": items}
+
+
+@app.post("/api/reload")
+def reload_models(model_id: Optional[str] = Form(default=None)) -> Dict[str, str]:
+    if model_id is not None and model_id not in MODEL_SPECS:
+        raise HTTPException(status_code=404, detail="Unknown model_id")
+    clear_cache(model_id=model_id)
+    return {"status": "reloaded"}
+
+
+@app.post("/api/predict")
+async def predict(
+    model_id: str = Form(...),
+    device: str = Form("cpu"),
+    file: UploadFile = File(...),
+) -> Dict[str, object]:
+    spec = MODEL_SPECS.get(model_id)
+    if spec is None:
+        raise HTTPException(status_code=404, detail="Unknown model_id")
+    if not spec.weights_path.exists():
+        raise HTTPException(status_code=400, detail="Weights file not found")
+
+    device_obj = resolve_device(device)
+
+    raw = await file.read()
+    try:
+        image = Image.open(io.BytesIO(raw)).convert("RGB")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid image file") from exc
+
+    transform = build_transform(spec)
+    tensor = transform(image).unsqueeze(0).to(device_obj)
+
+    try:
+        model = load_model(spec, device_obj)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    with torch.no_grad():
+        logits = model(tensor)
+        probs = torch.softmax(logits, dim=1).cpu().numpy().flatten()
+
+    class_names = spec.class_names
+    top_idx = int(np.argmax(probs))
+    top_label = class_names[top_idx]
+    top_conf = float(probs[top_idx])
+
+    return {
+        "model_id": model_id,
+        "label": top_label,
+        "confidence": top_conf,
+        "probs": {name: float(prob) for name, prob in zip(class_names, probs)},
+        "device": device_obj.type,
+    }
