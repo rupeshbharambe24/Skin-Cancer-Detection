@@ -6,6 +6,7 @@ export interface ModelInfo {
   class_names: string[];
   weights_path: string;
   weights_found: boolean;
+  test_accuracy: number;
 }
 
 export interface PredictionResult {
@@ -60,4 +61,27 @@ export async function predictImage(params: {
     throw new Error(text || "Prediction failed");
   }
   return (await res.json()) as PredictionResult;
+}
+
+export async function compareModels(params: {
+  modelIdA: string;
+  modelIdB: string;
+  file: File;
+  device: "cpu" | "cuda";
+}): Promise<{ a: PredictionResult; b: PredictionResult }> {
+  const form = new FormData();
+  form.append("model_id_a", params.modelIdA);
+  form.append("model_id_b", params.modelIdB);
+  form.append("device", params.device);
+  form.append("file", params.file);
+
+  const res = await fetch(`${API_URL}/api/compare`, {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Comparison failed");
+  }
+  return (await res.json()) as { a: PredictionResult; b: PredictionResult };
 }

@@ -1,10 +1,11 @@
 ﻿import { useEffect, useMemo, useState } from "react";
-import { Microscope } from "lucide-react";
+import { GitCompare, Microscope } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { ModelRuntimeCard } from "@/components/ModelRuntimeCard";
 import { UploadPreviewCard } from "@/components/UploadPreviewCard";
 import { AnalysisResultsCard } from "@/components/AnalysisResultsCard";
+import { Button } from "@/components/ui/button";
 import {
   fetchModels,
   predictImage,
@@ -12,8 +13,10 @@ import {
   ModelInfo,
   PredictionResult,
 } from "@/lib/api";
+import { useNavigate } from "react-router-dom";
 
 const Index = () => {
+  const navigate = useNavigate();
   const [isDark, setIsDark] = useState(false);
   const [status, setStatus] = useState<"ready" | "loading" | "error" | "idle">("idle");
   const [models, setModels] = useState<ModelInfo[]>([]);
@@ -131,6 +134,14 @@ const Index = () => {
             </div>
 
             <div className="flex items-center gap-3 sm:gap-4">
+              <Button
+                onClick={() => navigate("/comparison")}
+                variant="outline"
+                className="hidden sm:flex items-center gap-2 h-9 px-4 rounded-xl border-primary/30 hover:bg-primary/5 hover:border-primary/50 text-primary font-medium transition-all duration-300"
+              >
+                <GitCompare className="w-4 h-4" />
+                Model Comparison
+              </Button>
               <StatusPill status={status} />
               <ThemeToggle isDark={isDark} onToggle={() => setIsDark(!isDark)} />
             </div>

@@ -98,6 +98,7 @@ def list_models() -> Dict[str, list]:
                 "class_names": spec.class_names,
                 "weights_path": str(spec.weights_path),
                 "weights_found": spec.weights_path.exists(),
+                "test_accuracy": spec.test_accuracy,
             }
         )
     return {"models": items}
@@ -155,3 +156,44 @@ async def predict(
         "probs": {name: float(prob) for name, prob in zip(class_names, probs)},
         "device": device_obj.type,
     }
+
+
+@app.post("/api/compare")
+async def compare(
+    model_id_a: str = Form(...),
+    model_id_b: str = Form(...),
+    device: str = Form("cpu"),
+    file: UploadFile = File(...),
+) -> Dict[str, object]:
+    if model_id_a not in MODEL_SPECS or model_id_b not in MODEL_SPECS:
+        raise HTTPException(status_code=404, detail="Unknown model_id")
+
+    device_obj = resolve_device(device)
+
+    raw = await file.read()
+    try:
+        image = Image.open(io.BytesIO(raw)).convert("RGB")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid image file") from exc
+
+    def run(model_id: str) -> Dict[str, object]:
+        spec = MODEL_SPECS[model_id]
+        if not spec.weights_path.exists():
+            raise HTTPException(status_code=400, detail=f"Weights missing for {model_id}")
+        transform = build_transform(spec)
+        tensor = transform(image).unsqueeze(0).to(device_obj)
+        model = load_model(spec, device_obj)
+        with torch.no_grad():
+            logits = model(tensor)
+            probs = torch.softmax(logits, dim=1).cpu().numpy().flatten()
+        class_names = spec.class_names
+        top_idx = int(np.argmax(probs))
+        return {
+            "model_id": model_id,
+            "label": class_names[top_idx],
+            "confidence": float(probs[top_idx]),
+            "probs": {name: float(prob) for name, prob in zip(class_names, probs)},
+            "device": device_obj.type,
+        }
+
+    return {"a": run(model_id_a), "b": run(model_id_b)}

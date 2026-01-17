@@ -36,6 +36,9 @@ export function ModelRuntimeCard({
   const paramsLabel = currentModel
     ? `${(currentModel.params / 1_000_000).toFixed(2)}M`
     : "--";
+  const accuracyLabel = currentModel
+    ? `${currentModel.test_accuracy.toFixed(2)}%`
+    : "--";
   const weightsFile = currentModel?.weights_path?.split(/[/\\]/).pop() ?? "--";
 
   return (
@@ -61,6 +64,9 @@ export function ModelRuntimeCard({
               {models.map((model) => (
                 <SelectItem key={model.id} value={model.id} className="rounded-lg cursor-pointer">
                   <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-primary">
+                      {model.test_accuracy.toFixed(2)}%
+                    </span>
                     <span>{model.name}</span>
                     <span className="text-xs text-muted-foreground">
                       ({(model.params / 1_000_000).toFixed(2)}M)
@@ -117,6 +123,10 @@ export function ModelRuntimeCard({
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Parameters</span>
             <span className="font-medium text-foreground">{paramsLabel}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Test Accuracy</span>
+            <span className="font-medium text-foreground">{accuracyLabel}</span>
           </div>
         </div>
 

@@ -50,6 +50,7 @@ class ModelSpec:
     norm_mean: List[float]
     norm_std: List[float]
     class_names: List[str]
+    test_accuracy: float
 
 
 def build_resnet18(num_classes: int = 2) -> nn.Module:
@@ -77,26 +78,29 @@ def get_model_specs() -> List[ModelSpec]:
             norm_mean=[0.5, 0.5, 0.5],
             norm_std=[0.5, 0.5, 0.5],
             class_names=["benign", "malignant"],
+            test_accuracy=83.48,
         ),
         ModelSpec(
             key="resnet18_v2",
             name="ResNet18 (v2)",
             builder=build_resnet18,
-            weights_path=BASE_DIR / "models" /"skin_lesions_model_resnet18.pth",
+            weights_path=BASE_DIR / "models" / "skin_lesions_model_resnet18.pth",
             input_size=224,
             norm_mean=[0.485, 0.456, 0.406],
             norm_std=[0.229, 0.224, 0.225],
             class_names=["benign", "malignant"],
+            test_accuracy=90.0,
         ),
         ModelSpec(
             key="resnet18_v3",
             name="ResNet18 (v3)",
             builder=build_resnet18,
-            weights_path=BASE_DIR / "models" / "skin_lesions_model_resnet18_v3.pth",
+            weights_path=BASE_DIR / "models" /"skin_lesions_model_resnet18_v3.pth",
             input_size=224,
             norm_mean=[0.485, 0.456, 0.406],
             norm_std=[0.229, 0.224, 0.225],
             class_names=["benign", "malignant"],
+            test_accuracy=88.0,
         ),
     ]
 
