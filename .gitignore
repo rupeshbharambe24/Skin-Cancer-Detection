@@ -5,3 +5,12 @@ __python_cache__/
 *.pyd   
 env/
 venv/
+# Ignore all PDF files
+*.pdf
+
+# Ignore all ZIP files
+*.zip
+
+*.rar
+
+*.pt
