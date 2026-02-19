@@ -1,0 +1,5 @@
+split,class,count
+train,benign,1440
+train,malignant,1197
+test,benign,361
+test,malignant,300

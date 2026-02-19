@@ -1,0 +1,2 @@
+model_key,val_top1_accuracy,val_balanced_accuracy,val_macro_precision@0.5,val_macro_recall@0.5,val_macro_f1@0.5,val_macro_f1@0.5_notebook_fn,img_size,val_split_ratio,split_seed
+milk10k_v2,0.7417302798982188,0.4762325211201167,0.052399847773929475,0.4825115128584078,0.07568216130083935,0.07568216130083935,224,0.15,42
