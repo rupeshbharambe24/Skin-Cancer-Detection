@@ -14,3 +14,4 @@ venv/
 *.rar
 
 *.pt
+combined_isic_binary/
