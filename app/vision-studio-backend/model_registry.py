@@ -63,6 +63,16 @@ def build_resnet18(num_classes: int = 2) -> nn.Module:
     return model
 
 
+def build_densenet121(num_classes: int = 2) -> nn.Module:
+    model = models.densenet121(weights=None)
+    in_features = model.classifier.in_features
+    model.classifier = nn.Sequential(
+        nn.Dropout(0.3),
+        nn.Linear(in_features, num_classes),
+    )
+    return model
+
+
 def build_custom_cnn(num_classes: int = 2) -> nn.Module:
     return SkinLesionCNN(num_classes=num_classes)
 
@@ -101,6 +111,17 @@ def get_model_specs() -> List[ModelSpec]:
             norm_std=[0.229, 0.224, 0.225],
             class_names=["benign", "malignant"],
             test_accuracy=88.0,
+        ),
+        ModelSpec(
+            key="densenet121",
+            name="DenseNet121",
+            builder=build_densenet121,
+            weights_path=BASE_DIR / "models" / "skin_lesions_model_densenet121.pth",
+            input_size=224,
+            norm_mean=[0.485, 0.456, 0.406],
+            norm_std=[0.229, 0.224, 0.225],
+            class_names=["benign", "malignant"],
+            test_accuracy=0.0,
         ),
     ]
 
