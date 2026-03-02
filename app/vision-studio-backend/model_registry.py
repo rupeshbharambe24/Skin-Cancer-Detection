@@ -4,6 +4,7 @@ from typing import Callable, List
 
 import torch
 import torch.nn as nn
+import timm
 from torchvision import models
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -80,6 +81,14 @@ def build_mobilenetv3(num_classes: int = 2) -> nn.Module:
     return model
 
 
+def build_vit_small_timm(num_classes: int = 2) -> nn.Module:
+    return timm.create_model(
+        "vit_small_patch16_224.augreg_in21k_ft_in1k",
+        pretrained=False,
+        num_classes=num_classes,
+    )
+
+
 def build_custom_cnn(num_classes: int = 2) -> nn.Module:
     return SkinLesionCNN(num_classes=num_classes)
 
@@ -134,12 +143,23 @@ def get_model_specs() -> List[ModelSpec]:
             key="mobilenetv3",
             name="MobileNetV3-Large",
             builder=build_mobilenetv3,
-            weights_path=BASE_DIR / "models" / "skin_lesions_model_mobilenetv3.pth",
+            weights_path=BASE_DIR / "skin_lesions_model_mobilenetv3.pth",
             input_size=224,
             norm_mean=[0.485, 0.456, 0.406],
             norm_std=[0.229, 0.224, 0.225],
             class_names=["benign", "malignant"],
             test_accuracy=83.0,
+        ),
+        ModelSpec(
+            key="vit_small_patch16_224",
+            name="ViT-Small/16 (IN21K->IN1K)",
+            builder=build_vit_small_timm,
+            weights_path=BASE_DIR / "best_vit_small_patch16_224_augreg_in21k_ft_in1k.pt",
+            input_size=224,
+            norm_mean=[0.485, 0.456, 0.406],
+            norm_std=[0.229, 0.224, 0.225],
+            class_names=["benign", "malignant"],
+            test_accuracy=90.02,
         ),
     ]
 
