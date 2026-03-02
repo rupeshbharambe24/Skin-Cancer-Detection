@@ -73,6 +73,13 @@ def build_densenet121(num_classes: int = 2) -> nn.Module:
     return model
 
 
+def build_mobilenetv3(num_classes: int = 2) -> nn.Module:
+    model = models.mobilenet_v3_large(weights=None)
+    in_features = model.classifier[3].in_features
+    model.classifier[3] = nn.Linear(in_features, num_classes)
+    return model
+
+
 def build_custom_cnn(num_classes: int = 2) -> nn.Module:
     return SkinLesionCNN(num_classes=num_classes)
 
@@ -122,6 +129,17 @@ def get_model_specs() -> List[ModelSpec]:
             norm_std=[0.229, 0.224, 0.225],
             class_names=["benign", "malignant"],
             test_accuracy=90.0,
+        ),
+        ModelSpec(
+            key="mobilenetv3",
+            name="MobileNetV3-Large",
+            builder=build_mobilenetv3,
+            weights_path=BASE_DIR / "models" / "skin_lesions_model_mobilenetv3.pth",
+            input_size=224,
+            norm_mean=[0.485, 0.456, 0.406],
+            norm_std=[0.229, 0.224, 0.225],
+            class_names=["benign", "malignant"],
+            test_accuracy=83.0,
         ),
     ]
 
