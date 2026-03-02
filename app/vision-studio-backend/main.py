@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import io
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -70,6 +70,31 @@ def clear_cache(model_id: Optional[str] = None) -> None:
         MODEL_CACHE.pop(key, None)
 
 
+def run_inference(
+    model_id: str,
+    image: Image.Image,
+    device_obj: torch.device,
+) -> Dict[str, object]:
+    spec = MODEL_SPECS[model_id]
+    if not spec.weights_path.exists():
+        raise HTTPException(status_code=400, detail=f"Weights missing for {model_id}")
+    transform = build_transform(spec)
+    tensor = transform(image).unsqueeze(0).to(device_obj)
+    model = load_model(spec, device_obj)
+    with torch.no_grad():
+        logits = model(tensor)
+        probs = torch.softmax(logits, dim=1).cpu().numpy().flatten()
+    class_names = spec.class_names
+    top_idx = int(np.argmax(probs))
+    return {
+        "model_id": model_id,
+        "label": class_names[top_idx],
+        "confidence": float(probs[top_idx]),
+        "probs": {name: float(prob) for name, prob in zip(class_names, probs)},
+        "device": device_obj.type,
+    }
+
+
 @app.get("/api/health")
 def health() -> Dict[str, str]:
     return {"status": "ok"}
@@ -132,30 +157,7 @@ async def predict(
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid image file") from exc
 
-    transform = build_transform(spec)
-    tensor = transform(image).unsqueeze(0).to(device_obj)
-
-    try:
-        model = load_model(spec, device_obj)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    with torch.no_grad():
-        logits = model(tensor)
-        probs = torch.softmax(logits, dim=1).cpu().numpy().flatten()
-
-    class_names = spec.class_names
-    top_idx = int(np.argmax(probs))
-    top_label = class_names[top_idx]
-    top_conf = float(probs[top_idx])
-
-    return {
-        "model_id": model_id,
-        "label": top_label,
-        "confidence": top_conf,
-        "probs": {name: float(prob) for name, prob in zip(class_names, probs)},
-        "device": device_obj.type,
-    }
+    return run_inference(model_id, image, device_obj)
 
 
 @app.post("/api/compare")
@@ -176,24 +178,33 @@ async def compare(
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid image file") from exc
 
-    def run(model_id: str) -> Dict[str, object]:
-        spec = MODEL_SPECS[model_id]
-        if not spec.weights_path.exists():
-            raise HTTPException(status_code=400, detail=f"Weights missing for {model_id}")
-        transform = build_transform(spec)
-        tensor = transform(image).unsqueeze(0).to(device_obj)
-        model = load_model(spec, device_obj)
-        with torch.no_grad():
-            logits = model(tensor)
-            probs = torch.softmax(logits, dim=1).cpu().numpy().flatten()
-        class_names = spec.class_names
-        top_idx = int(np.argmax(probs))
-        return {
-            "model_id": model_id,
-            "label": class_names[top_idx],
-            "confidence": float(probs[top_idx]),
-            "probs": {name: float(prob) for name, prob in zip(class_names, probs)},
-            "device": device_obj.type,
-        }
+    return {"a": run_inference(model_id_a, image, device_obj), "b": run_inference(model_id_b, image, device_obj)}
 
-    return {"a": run(model_id_a), "b": run(model_id_b)}
+
+@app.post("/api/compare-multi")
+async def compare_multi(
+    model_ids: List[str] = Form(...),
+    device: str = Form("cpu"),
+    file: UploadFile = File(...),
+) -> Dict[str, object]:
+    unique_model_ids: List[str] = list(dict.fromkeys(model_ids))
+    if len(unique_model_ids) < 2:
+        raise HTTPException(status_code=400, detail="Select at least 2 unique models")
+    if len(unique_model_ids) > len(MODEL_SPECS):
+        raise HTTPException(status_code=400, detail="Selected models exceed available models")
+
+    for model_id in unique_model_ids:
+        if model_id not in MODEL_SPECS:
+            raise HTTPException(status_code=404, detail=f"Unknown model_id: {model_id}")
+
+    device_obj = resolve_device(device)
+
+    raw = await file.read()
+    try:
+        image = Image.open(io.BytesIO(raw)).convert("RGB")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid image file") from exc
+
+    return {
+        "results": [run_inference(model_id, image, device_obj) for model_id in unique_model_ids]
+    }

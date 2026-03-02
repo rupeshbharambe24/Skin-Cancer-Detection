@@ -17,7 +17,7 @@ import { useNavigate } from "react-router-dom";
 
 const Index = () => {
   const navigate = useNavigate();
-  const [isDark, setIsDark] = useState(false);
+  const [isDark, setIsDark] = useState<boolean>(() => localStorage.getItem("lesion_studio_theme") === "dark");
   const [status, setStatus] = useState<"ready" | "loading" | "error" | "idle">("idle");
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string>("");
@@ -31,8 +31,10 @@ const Index = () => {
   useEffect(() => {
     if (isDark) {
       document.documentElement.classList.add("dark");
+      localStorage.setItem("lesion_studio_theme", "dark");
     } else {
       document.documentElement.classList.remove("dark");
+      localStorage.setItem("lesion_studio_theme", "light");
     }
   }, [isDark]);
 

@@ -1,10 +1,6 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  ArrowLeft,
-  FlaskConical,
-  Zap,
-} from "lucide-react";
+import { ArrowLeft, FlaskConical, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -16,37 +12,52 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ProbabilityBar } from "@/components/ui/ProbabilityBar";
-import { compareModels, fetchModels, ModelInfo, PredictionResult } from "@/lib/api";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import {
+  compareMultipleModels,
+  fetchModels,
+  ModelInfo,
+  PredictionResult,
+} from "@/lib/api";
 
-interface CompareResult {
-  a: PredictionResult;
-  b: PredictionResult;
-}
+const THEME_STORAGE_KEY = "lesion_studio_theme";
 
 export default function ModelComparison() {
   const navigate = useNavigate();
+  const [isDark, setIsDark] = useState(false);
   const [models, setModels] = useState<ModelInfo[]>([]);
-  const [modelA, setModelA] = useState<string>("");
-  const [modelB, setModelB] = useState<string>("");
+  const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
+  const [compareCount, setCompareCount] = useState<number>(2);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [hasResults, setHasResults] = useState(false);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [gpuEnabled, setGpuEnabled] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [results, setResults] = useState<CompareResult | null>(null);
+  const [results, setResults] = useState<PredictionResult[]>([]);
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+    setIsDark(savedTheme === "dark");
+  }, []);
+
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem(THEME_STORAGE_KEY, "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem(THEME_STORAGE_KEY, "light");
+    }
+  }, [isDark]);
 
   useEffect(() => {
     const load = async () => {
       try {
         const data = await fetchModels();
         setModels(data);
-        if (!modelA && data[0]) {
-          setModelA(data[0].id);
-        }
-        if (!modelB && data[1]) {
-          setModelB(data[1].id);
-        }
+        const initialCount = Math.min(Math.max(2, data.length >= 2 ? 2 : data.length), data.length);
+        setCompareCount(initialCount);
+        setSelectedModelIds(data.slice(0, initialCount).map((m) => m.id));
       } catch {
         setError("Unable to reach the backend. Start the API server and retry.");
       }
@@ -54,42 +65,89 @@ export default function ModelComparison() {
     load();
   }, []);
 
-  const modelAInfo = useMemo(
-    () => models.find((m) => m.id === modelA),
-    [models, modelA]
-  );
-  const modelBInfo = useMemo(
-    () => models.find((m) => m.id === modelB),
-    [models, modelB]
+  useEffect(() => {
+    if (!models.length) {
+      return;
+    }
+    const capped = Math.max(2, Math.min(compareCount, models.length));
+    if (capped !== compareCount) {
+      setCompareCount(capped);
+      return;
+    }
+
+    setSelectedModelIds((prev) => {
+      const next = [...prev];
+      while (next.length < capped) {
+        const candidate = models.find((m) => !next.includes(m.id));
+        if (!candidate) {
+          break;
+        }
+        next.push(candidate.id);
+      }
+      if (next.length > capped) {
+        next.length = capped;
+      }
+      return next;
+    });
+  }, [compareCount, models]);
+
+  const selectedInfos = useMemo(
+    () =>
+      selectedModelIds
+        .map((id) => models.find((m) => m.id === id))
+        .filter((m): m is ModelInfo => Boolean(m)),
+    [models, selectedModelIds]
   );
 
-  const canAnalyze =
-    Boolean(uploadedFile) &&
-    Boolean(modelAInfo?.weights_found) &&
-    Boolean(modelBInfo?.weights_found);
+  const resultMap = useMemo(() => {
+    const map = new Map<string, PredictionResult>();
+    results.forEach((r) => map.set(r.model_id, r));
+    return map;
+  }, [results]);
+
+  const hasDuplicateModels = new Set(selectedModelIds).size !== selectedModelIds.length;
+  const allModelsValid =
+    selectedModelIds.length >= 2 &&
+    selectedInfos.length === selectedModelIds.length &&
+    selectedInfos.every((m) => m.weights_found);
+
+  const canAnalyze = Boolean(uploadedFile) && allModelsValid && !hasDuplicateModels;
+
+  const handleModelChange = (index: number, modelId: string) => {
+    setSelectedModelIds((prev) => {
+      const next = [...prev];
+      next[index] = modelId;
+      return next;
+    });
+    setError(null);
+    setResults([]);
+  };
 
   const handleAnalyze = async () => {
-    if (!uploadedFile || !modelA || !modelB) {
+    if (!uploadedFile) {
       return;
     }
-    if (!modelAInfo?.weights_found || !modelBInfo?.weights_found) {
-      setError("Weights missing for one or more selected models.");
+    if (hasDuplicateModels) {
+      setError("Please select unique models for comparison.");
       return;
     }
+    if (!allModelsValid) {
+      setError("One or more selected models are invalid or missing weights.");
+      return;
+    }
+
     setIsAnalyzing(true);
     setError(null);
-    setHasResults(false);
+    setResults([]);
     try {
-      const response = await compareModels({
-        modelIdA: modelA,
-        modelIdB: modelB,
+      const response = await compareMultipleModels({
+        modelIds: selectedModelIds,
         file: uploadedFile,
         device: gpuEnabled ? "cuda" : "cpu",
       });
-      setResults(response);
-      setHasResults(true);
+      setResults(response.results);
     } catch {
-      setError("Comparison failed. Check the weights and try again.");
+      setError("Comparison failed. Check backend and model weights, then retry.");
     } finally {
       setIsAnalyzing(false);
     }
@@ -97,16 +155,17 @@ export default function ModelComparison() {
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setUploadedImage(reader.result as string);
-        setUploadedFile(file);
-        setHasResults(false);
-        setResults(null);
-      };
-      reader.readAsDataURL(file);
+    if (!file) {
+      return;
     }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setUploadedImage(reader.result as string);
+      setUploadedFile(file);
+      setResults([]);
+      setError(null);
+    };
+    reader.readAsDataURL(file);
   };
 
   const renderProbs = (result?: PredictionResult | null) => {
@@ -130,9 +189,11 @@ export default function ModelComparison() {
     );
   };
 
+  const maxCompareCount = Math.max(2, models.length);
+
   return (
-    <div className="min-h-screen bg-[#F8FAFC]">
-      <header className="sticky top-0 z-50 backdrop-blur-xl bg-white/70 border-b border-slate-200/50">
+    <div className="min-h-screen gradient-bg">
+      <header className="sticky top-0 z-50 backdrop-blur-xl bg-background/70 border-b border-border/50">
         <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 sm:h-20">
             <div className="flex items-center gap-4">
@@ -140,102 +201,119 @@ export default function ModelComparison() {
                 variant="ghost"
                 size="icon"
                 onClick={() => navigate("/")}
-                className="rounded-xl hover:bg-slate-100"
+                className="rounded-xl hover:bg-secondary"
               >
-                <ArrowLeft className="w-5 h-5 text-slate-600" />
+                <ArrowLeft className="w-5 h-5 text-muted-foreground" />
               </Button>
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-teal-50">
-                  <FlaskConical className="w-5 h-5 sm:w-6 sm:h-6 text-teal-500" />
+                <div className="p-2 rounded-xl bg-primary/10">
+                  <FlaskConical className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
                 </div>
-                <span className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight font-['Sora',sans-serif]">
-                  Lesion Studio
+                <span className="text-lg sm:text-xl font-bold text-foreground tracking-tight font-['Sora',sans-serif]">
+                  Model Comparison
                 </span>
               </div>
             </div>
 
-            <div className="flex items-center gap-3 px-4 py-2 rounded-full bg-slate-100/80">
-              <Label htmlFor="gpu-toggle" className="text-sm font-medium text-slate-600 cursor-pointer">
-                GPU
-              </Label>
-              <Switch
-                id="gpu-toggle"
-                checked={gpuEnabled}
-                onCheckedChange={setGpuEnabled}
-                className="data-[state=checked]:bg-teal-500"
-              />
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 px-4 py-2 rounded-full bg-secondary/80">
+                <Label htmlFor="gpu-toggle" className="text-sm font-medium text-muted-foreground cursor-pointer">
+                  GPU
+                </Label>
+                <Switch
+                  id="gpu-toggle"
+                  checked={gpuEnabled}
+                  onCheckedChange={setGpuEnabled}
+                  className="data-[state=checked]:bg-primary"
+                />
+              </div>
+              <ThemeToggle isDark={isDark} onToggle={() => setIsDark(!isDark)} />
             </div>
           </div>
         </div>
       </header>
 
-      <main className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         {error && (
-          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {error}
           </div>
         )}
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-10">
-          <div className="flex items-center gap-3 w-full sm:w-auto">
-            <Select value={modelA} onValueChange={setModelA}>
-              <SelectTrigger className="w-full sm:w-60 h-12 rounded-xl bg-white border border-slate-200 shadow-sm font-medium">
-                <SelectValue placeholder="Model A" />
-              </SelectTrigger>
-              <SelectContent className="bg-white border border-slate-200 rounded-xl shadow-lg">
-                {models.map((model) => (
-                  <SelectItem key={model.id} value={model.id} className="rounded-lg cursor-pointer">
-                    {model.test_accuracy.toFixed(2)}% • {model.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        <div className="bg-card rounded-2xl border border-border p-5 sm:p-6 space-y-5 shadow-sm">
+          <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-4 items-start">
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground">Models to compare</Label>
+              <Select value={String(compareCount)} onValueChange={(v) => setCompareCount(Number(v))}>
+                <SelectTrigger className="h-11 rounded-xl bg-background">
+                  <SelectValue placeholder="Select count" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: maxCompareCount - 1 }, (_, i) => i + 2).map((count) => (
+                    <SelectItem key={count} value={String(count)}>
+                      {count} models
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-            <span className="text-slate-400 font-semibold text-lg">vs</span>
-
-            <Select value={modelB} onValueChange={setModelB}>
-              <SelectTrigger className="w-full sm:w-60 h-12 rounded-xl bg-white border border-slate-200 shadow-sm font-medium">
-                <SelectValue placeholder="Model B" />
-              </SelectTrigger>
-              <SelectContent className="bg-white border border-slate-200 rounded-xl shadow-lg">
-                {models.map((model) => (
-                  <SelectItem key={model.id} value={model.id} className="rounded-lg cursor-pointer">
-                    {model.test_accuracy.toFixed(2)}% • {model.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {selectedModelIds.map((selectedId, index) => (
+                <Select
+                  key={`model-slot-${index}`}
+                  value={selectedId}
+                  onValueChange={(v) => handleModelChange(index, v)}
+                >
+                  <SelectTrigger className="h-11 rounded-xl bg-background">
+                    <SelectValue placeholder={`Model ${index + 1}`} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {models.map((model) => (
+                      <SelectItem key={model.id} value={model.id}>
+                        {model.test_accuracy.toFixed(2)}% • {model.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ))}
+            </div>
           </div>
 
-          <Button
-            onClick={handleAnalyze}
-            disabled={!canAnalyze || isAnalyzing}
-            className="h-12 px-8 rounded-xl bg-gradient-to-r from-teal-500 to-teal-400 hover:from-teal-600 hover:to-teal-500 text-white font-semibold shadow-lg shadow-teal-500/25 transition-all duration-300"
-          >
-            {isAnalyzing ? (
-              <>
-                <div className="w-5 h-5 mr-2 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Analyzing...
-              </>
-            ) : (
-              <>
-                <Zap className="w-5 h-5 mr-2" />
-                Sync & Analyze
-              </>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <Button
+              onClick={handleAnalyze}
+              disabled={!canAnalyze || isAnalyzing}
+              className="h-11 px-6 rounded-xl bg-gradient-to-r from-primary to-teal-400 text-white font-semibold"
+            >
+              {isAnalyzing ? (
+                <>
+                  <div className="w-5 h-5 mr-2 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <Zap className="w-5 h-5 mr-2" />
+                  Compare Models
+                </>
+              )}
+            </Button>
+            {hasDuplicateModels && (
+              <p className="text-sm text-destructive">Each slot must have a unique model.</p>
             )}
-          </Button>
+          </div>
         </div>
 
         {!uploadedImage && (
-          <div className="flex justify-center mb-10">
+          <div className="flex justify-center">
             <label className="relative cursor-pointer group">
-              <div className="w-64 h-64 rounded-2xl border-2 border-dashed border-slate-300 bg-white flex flex-col items-center justify-center gap-4 transition-all duration-300 group-hover:border-teal-400 group-hover:bg-teal-50/30">
-                <div className="p-4 rounded-full bg-slate-100 group-hover:bg-teal-100 transition-colors">
-                  <Zap className="w-8 h-8 text-slate-400 group-hover:text-teal-500" />
+              <div className="w-64 h-64 rounded-2xl border-2 border-dashed border-border bg-card flex flex-col items-center justify-center gap-4 transition-all duration-300 group-hover:border-primary group-hover:bg-accent/40">
+                <div className="p-4 rounded-full bg-secondary group-hover:bg-primary/10 transition-colors">
+                  <Zap className="w-8 h-8 text-muted-foreground group-hover:text-primary" />
                 </div>
                 <div className="text-center">
-                  <p className="text-sm font-medium text-slate-700">Upload skin lesion image</p>
-                  <p className="text-xs text-slate-400 mt-1">PNG, JPG up to 10MB</p>
+                  <p className="text-sm font-medium text-foreground">Upload skin lesion image</p>
+                  <p className="text-xs text-muted-foreground mt-1">PNG, JPG up to 10MB</p>
                 </div>
               </div>
               <input
@@ -249,96 +327,51 @@ export default function ModelComparison() {
         )}
 
         {uploadedImage && (
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] gap-6 lg:gap-8 items-start">
-            <div className="bg-white rounded-[20px] border border-slate-200/80 shadow-lg p-6 space-y-5">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-slate-700 font-['Sora',sans-serif]">
-                  {modelAInfo?.name || "Model A"}
-                </h3>
-                <span className="text-xs font-medium text-slate-400 bg-slate-100 px-3 py-1 rounded-full">Model A</span>
-              </div>
-
-              <div className="flex items-center justify-between text-sm text-slate-500">
-                <span>Test Accuracy</span>
-                <span className="font-semibold text-slate-700">
-                  {modelAInfo ? `${modelAInfo.test_accuracy.toFixed(2)}%` : "--"}
-                </span>
-              </div>
-
-              {hasResults && results?.a ? (
-                <div className="space-y-5 animate-fade-in">
-                  <div className="text-center py-4">
-                    <p className="text-5xl font-bold text-teal-500 font-['Sora',sans-serif]">
-                      {(results.a.confidence * 100).toFixed(1)}%
-                    </p>
-                    <p className="text-xl font-bold text-slate-800 mt-2 font-['Sora',sans-serif]">
-                      {results.a.label}
-                    </p>
-                  </div>
-
-                  {renderProbs(results.a)}
-                </div>
-              ) : (
-                <div className="flex items-center justify-center py-12 text-slate-400">
-                  <p className="text-sm">Click "Sync & Analyze" to see results</p>
-                </div>
-              )}
-            </div>
-
-            <div className="flex flex-col items-center gap-6 lg:mt-12">
+          <div className="space-y-6">
+            <div className="flex justify-center">
               <div className="relative">
-                <div className="w-48 h-48 lg:w-56 lg:h-56 rounded-2xl overflow-hidden border-4 border-white shadow-xl">
-                  <img
-                    src={uploadedImage}
-                    alt="Uploaded lesion"
-                    className="w-full h-full object-cover"
-                  />
+                <div className="w-48 h-48 rounded-2xl overflow-hidden border-2 border-border shadow-md">
+                  <img src={uploadedImage} alt="Uploaded lesion" className="w-full h-full object-cover" />
                 </div>
-                <label className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-white px-3 py-1.5 rounded-full shadow-md border border-slate-200 text-xs font-medium text-slate-600 cursor-pointer hover:bg-slate-50 transition-colors">
+                <label className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-card px-3 py-1.5 rounded-full shadow-md border border-border text-xs font-medium text-muted-foreground cursor-pointer hover:bg-secondary transition-colors">
                   Change Image
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                    className="hidden"
-                  />
+                  <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
                 </label>
               </div>
             </div>
 
-            <div className="bg-white rounded-[20px] border border-slate-200/80 shadow-lg p-6 space-y-5">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-slate-700 font-['Sora',sans-serif]">
-                  {modelBInfo?.name || "Model B"}
-                </h3>
-                <span className="text-xs font-medium text-slate-400 bg-slate-100 px-3 py-1 rounded-full">Model B</span>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+              {selectedInfos.map((model) => {
+                const result = resultMap.get(model.id);
+                return (
+                  <div key={model.id} className="bg-card rounded-2xl border border-border shadow-sm p-5 space-y-4">
+                    <div className="space-y-1">
+                      <h3 className="text-base font-semibold text-foreground font-['Sora',sans-serif]">
+                        {model.name}
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Test Accuracy: <span className="font-medium text-foreground">{model.test_accuracy.toFixed(2)}%</span>
+                      </p>
+                    </div>
 
-              <div className="flex items-center justify-between text-sm text-slate-500">
-                <span>Test Accuracy</span>
-                <span className="font-semibold text-slate-700">
-                  {modelBInfo ? `${modelBInfo.test_accuracy.toFixed(2)}%` : "--"}
-                </span>
-              </div>
-
-              {hasResults && results?.b ? (
-                <div className="space-y-5 animate-fade-in">
-                  <div className="text-center py-4">
-                    <p className="text-5xl font-bold text-teal-500 font-['Sora',sans-serif]">
-                      {(results.b.confidence * 100).toFixed(1)}%
-                    </p>
-                    <p className="text-xl font-bold text-slate-800 mt-2 font-['Sora',sans-serif]">
-                      {results.b.label}
-                    </p>
+                    {result ? (
+                      <div className="space-y-4">
+                        <div className="text-center py-1">
+                          <p className="text-4xl font-bold text-primary font-['Sora',sans-serif]">
+                            {(result.confidence * 100).toFixed(1)}%
+                          </p>
+                          <p className="text-lg font-semibold text-foreground mt-1">{result.label}</p>
+                        </div>
+                        {renderProbs(result)}
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center py-12 text-muted-foreground">
+                        <p className="text-sm">Click "Compare Models" to run inference.</p>
+                      </div>
+                    )}
                   </div>
-
-                  {renderProbs(results.b)}
-                </div>
-              ) : (
-                <div className="flex items-center justify-center py-12 text-slate-400">
-                  <p className="text-sm">Click "Sync & Analyze" to see results</p>
-                </div>
-              )}
+                );
+              })}
             </div>
           </div>
         )}

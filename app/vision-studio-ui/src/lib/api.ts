@@ -85,3 +85,24 @@ export async function compareModels(params: {
   }
   return (await res.json()) as { a: PredictionResult; b: PredictionResult };
 }
+
+export async function compareMultipleModels(params: {
+  modelIds: string[];
+  file: File;
+  device: "cpu" | "cuda";
+}): Promise<{ results: PredictionResult[] }> {
+  const form = new FormData();
+  params.modelIds.forEach((id) => form.append("model_ids", id));
+  form.append("device", params.device);
+  form.append("file", params.file);
+
+  const res = await fetch(`${API_URL}/api/compare-multi`, {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Comparison failed");
+  }
+  return (await res.json()) as { results: PredictionResult[] };
+}
