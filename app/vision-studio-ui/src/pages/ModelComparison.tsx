@@ -106,12 +106,20 @@ export default function ModelComparison() {
   }, [results]);
 
   const hasDuplicateModels = new Set(selectedModelIds).size !== selectedModelIds.length;
+  const missingWeightModels = selectedInfos.filter((m) => !m.weights_found).map((m) => m.name);
   const allModelsValid =
     selectedModelIds.length >= 2 &&
     selectedInfos.length === selectedModelIds.length &&
     selectedInfos.every((m) => m.weights_found);
 
   const canAnalyze = Boolean(uploadedFile) && allModelsValid && !hasDuplicateModels;
+  const disabledReason = !uploadedFile
+    ? "Upload an image to enable comparison."
+    : hasDuplicateModels
+      ? "Select unique models for all slots."
+      : missingWeightModels.length > 0
+        ? `Missing weights for: ${missingWeightModels.join(", ")}`
+        : null;
 
   const handleModelChange = (index: number, modelId: string) => {
     setSelectedModelIds((prev) => {
@@ -298,9 +306,7 @@ export default function ModelComparison() {
                 </>
               )}
             </Button>
-            {hasDuplicateModels && (
-              <p className="text-sm text-destructive">Each slot must have a unique model.</p>
-            )}
+            {disabledReason && <p className="text-sm text-destructive">{disabledReason}</p>}
           </div>
         </div>
 
