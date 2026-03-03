@@ -89,6 +89,22 @@ def build_vit_small_timm(num_classes: int = 2) -> nn.Module:
     )
 
 
+def build_convnext_tiny_timm(num_classes: int = 2) -> nn.Module:
+    return timm.create_model(
+        "convnext_tiny.in12k_ft_in1k",
+        pretrained=False,
+        num_classes=num_classes,
+    )
+
+
+def build_efficientnetv2_s_timm(num_classes: int = 2) -> nn.Module:
+    return timm.create_model(
+        "tf_efficientnetv2_s.in21k_ft_in1k",
+        pretrained=False,
+        num_classes=num_classes,
+    )
+
+
 def build_custom_cnn(num_classes: int = 2) -> nn.Module:
     return SkinLesionCNN(num_classes=num_classes)
 
@@ -160,6 +176,28 @@ def get_model_specs() -> List[ModelSpec]:
             norm_std=[0.229, 0.224, 0.225],
             class_names=["benign", "malignant"],
             test_accuracy=90.02,
+        ),
+        ModelSpec(
+            key="convnext_tiny_in12k",
+            name="ConvNeXt-Tiny (IN12K->IN1K)",
+            builder=build_convnext_tiny_timm,
+            weights_path=BASE_DIR / "best_convnext_tiny_in12k_ft_in1k.pt",
+            input_size=224,
+            norm_mean=[0.485, 0.456, 0.406],
+            norm_std=[0.229, 0.224, 0.225],
+            class_names=["benign", "malignant"],
+            test_accuracy=89.0,
+        ),
+        ModelSpec(
+            key="efficientnetv2_s_in21k",
+            name="EfficientNetV2-S (IN21K->IN1K)",
+            builder=build_efficientnetv2_s_timm,
+            weights_path=BASE_DIR / "best_tf_efficientnetv2_s_in21k_ft_in1k.pt",
+            input_size=224,
+            norm_mean=[0.485, 0.456, 0.406],
+            norm_std=[0.229, 0.224, 0.225],
+            class_names=["benign", "malignant"],
+            test_accuracy=89.0,
         ),
     ]
 
