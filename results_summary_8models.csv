@@ -1,9 +1,9 @@
 Model,Test Accuracy,Macro-F1,Benign F1,Malignant F1,ROC-AUC,PR-AUC,Support,Notebook
-Custom CNN (v1),0.83,0.83,0.84,0.83,,,660,Skin_Lesions_train.ipynb
-ResNet18 (v2),0.9,0.9,0.91,0.89,,,661,Skin_Lesions_train_resnet18_v2.ipynb
-ResNet18 (v3),0.89,0.89,0.9,0.88,,,661,Skin_Lesions_train_resnet18_v3.ipynb
-DenseNet121,0.9,0.9,0.91,0.89,,,661,Skin_Lesions_train_densenet.ipynb
-MobileNetV3-Large,0.83,0.83,0.85,0.81,,,661,Skin_Lesions_train_mobilenetv3.ipynb
+Custom CNN (v1),0.83,0.83,0.84,0.83,0.4875,0.4981,660,Skin_Lesions_train.ipynb
+ResNet18 (v2),0.9,0.9,0.91,0.89,0.4346,0.4027,661,Skin_Lesions_train_resnet18_v2.ipynb
+ResNet18 (v3),0.89,0.89,0.9,0.88,0.4299,0.4074,661,Skin_Lesions_train_resnet18_v3.ipynb
+DenseNet121,0.9,0.9,0.91,0.89,0.5535,0.5023,661,Skin_Lesions_train_densenet.ipynb
+MobileNetV3-Large,0.83,0.83,0.85,0.81,0.2651,0.3248,661,Skin_Lesions_train_mobilenetv3.ipynb
 ViT-Small/16 (IN21K->IN1K) - New,0.903177004538578,0.8950819672131147,0.91,0.9,0.9722807017543859,0.9699221597219962,661,Binary_SkinCancer_ViT_timm.ipynb
 ConvNeXt-Tiny (IN12K->IN1K) - New,0.9016641452344932,0.8903878583473862,0.91,0.89,0.9575530932594644,0.9567725898735489,661,Binary_SkinCancer_ConvNeXt_timm.ipynb
 EfficientNetV2-S (IN21K->IN1K) - New,0.9152798789712556,0.9066666666666666,0.92,0.91,0.9639427516158818,0.9556282055913234,661,Binary_SkinCancer_EfficientNetV2_timm.ipynb
