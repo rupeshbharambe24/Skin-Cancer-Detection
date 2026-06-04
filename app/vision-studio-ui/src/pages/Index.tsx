@@ -204,19 +204,8 @@ const Index = () => {
         </div>
 
         <footer className="mt-12 pt-6 border-t border-border/50">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
+          <div className="text-sm text-muted-foreground">
             <p>Ac 2026 Lesion Classifier Studio. For demonstration purposes only.</p>
-            <div className="flex items-center gap-4">
-              <span className="hover:text-foreground transition-colors cursor-pointer">
-                Documentation
-              </span>
-              <span className="hover:text-foreground transition-colors cursor-pointer">
-                API Reference
-              </span>
-              <span className="hover:text-foreground transition-colors cursor-pointer">
-                Support
-              </span>
-            </div>
           </div>
         </footer>
       </main>
