@@ -1,20 +1,32 @@
-data/
-__python_cache__/
+# Python
+__pycache__/
 *.pyc
 *.pyo
-*.pyd   
-env/
+.env
+.env.*
+*.egg-info/
 venv/
-# Ignore all PDF files
-*.pdf
+.venv/
 
-# Ignore all ZIP files
-*.zip
-
-*.rar
-
+# Model weights (download separately)
+*.pth
 *.pt
+*.onnx
+*.safetensors
 combined_isic_binary/
 
-# Office temp/lock files
+# Word / Office temp files
 ~$*
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+.next/
+dist/
