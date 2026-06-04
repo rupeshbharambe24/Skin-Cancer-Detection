@@ -8,6 +8,7 @@ import { AnalysisResultsCard } from "@/components/AnalysisResultsCard";
 import { Button } from "@/components/ui/button";
 import {
   fetchModels,
+  fetchModelsWithRetry,
   predictImage,
   reloadModels,
   ModelInfo,
@@ -18,7 +19,7 @@ import { useNavigate } from "react-router-dom";
 const Index = () => {
   const navigate = useNavigate();
   const [isDark, setIsDark] = useState<boolean>(() => localStorage.getItem("lesion_studio_theme") === "dark");
-  const [status, setStatus] = useState<"ready" | "loading" | "error" | "idle">("idle");
+  const [status, setStatus] = useState<"ready" | "loading" | "error" | "idle" | "starting">("idle");
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string>("");
   const [gpuEnabled, setGpuEnabled] = useState(true);
@@ -52,8 +53,29 @@ const Index = () => {
     }
   };
 
+  // On initial mount, wait out the backend startup window (uvicorn boot +
+  // model imports) by retrying instead of erroring on the first failed fetch.
   useEffect(() => {
-    loadModels();
+    let cancelled = false;
+    const connect = async () => {
+      setStatus("starting");
+      setError(null);
+      try {
+        const data = await fetchModelsWithRetry();
+        if (cancelled) return;
+        setModels(data);
+        setSelectedModelId((prev) => prev || data[0]?.id || "");
+        setStatus("ready");
+      } catch (err) {
+        if (cancelled) return;
+        setStatus("error");
+        setError("Unable to reach the backend. Start the API server and retry.");
+      }
+    };
+    connect();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {

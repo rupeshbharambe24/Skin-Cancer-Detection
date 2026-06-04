@@ -15,7 +15,7 @@ import { ProbabilityBar } from "@/components/ui/ProbabilityBar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import {
   compareMultipleModels,
-  fetchModels,
+  fetchModelsWithRetry,
   ModelInfo,
   PredictionResult,
 } from "@/lib/api";
@@ -51,18 +51,24 @@ export default function ModelComparison() {
   }, [isDark]);
 
   useEffect(() => {
+    let cancelled = false;
     const load = async () => {
       try {
-        const data = await fetchModels();
+        const data = await fetchModelsWithRetry();
+        if (cancelled) return;
         setModels(data);
         const initialCount = Math.min(Math.max(2, data.length >= 2 ? 2 : data.length), data.length);
         setCompareCount(initialCount);
         setSelectedModelIds(data.slice(0, initialCount).map((m) => m.id));
       } catch {
+        if (cancelled) return;
         setError("Unable to reach the backend. Start the API server and retry.");
       }
     };
     load();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {

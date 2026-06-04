@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
 interface StatusPillProps {
-  status: "ready" | "loading" | "error" | "idle";
+  status: "ready" | "loading" | "error" | "idle" | "starting";
   className?: string;
 }
 
@@ -11,6 +11,12 @@ const statusConfig = {
     dotClass: "bg-success",
     bgClass: "bg-success/10",
     textClass: "text-success",
+  },
+  starting: {
+    label: "Starting server...",
+    dotClass: "bg-warning animate-pulse",
+    bgClass: "bg-warning/10",
+    textClass: "text-warning",
   },
   loading: {
     label: "Loading...",

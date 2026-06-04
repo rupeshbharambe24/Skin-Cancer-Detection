@@ -28,6 +28,42 @@ export async function fetchModels(): Promise<ModelInfo[]> {
   return data.models as ModelInfo[];
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Poll the backend until it responds, then return the model list. Used on
+ * initial page load so the UI waits out the backend startup window (uvicorn
+ * boot + model imports) instead of erroring on the first failed fetch.
+ *
+ * @param options.timeoutMs total time to keep retrying before giving up
+ * @param options.intervalMs delay between attempts
+ * @param options.onAttempt callback fired before each attempt (1-based index)
+ */
+export async function fetchModelsWithRetry(options?: {
+  timeoutMs?: number;
+  intervalMs?: number;
+  onAttempt?: (attempt: number) => void;
+}): Promise<ModelInfo[]> {
+  const timeoutMs = options?.timeoutMs ?? 60000;
+  const intervalMs = options?.intervalMs ?? 1500;
+  const deadline = Date.now() + timeoutMs;
+  let attempt = 0;
+  let lastError: unknown;
+
+  while (Date.now() < deadline) {
+    attempt += 1;
+    options?.onAttempt?.(attempt);
+    try {
+      return await fetchModels();
+    } catch (err) {
+      lastError = err;
+      await sleep(intervalMs);
+    }
+  }
+
+  throw lastError ?? new Error("Backend did not become ready in time");
+}
+
 export async function reloadModels(modelId?: string): Promise<void> {
   const form = new FormData();
   if (modelId) {
