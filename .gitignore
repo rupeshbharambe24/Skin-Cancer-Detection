@@ -15,3 +15,6 @@ venv/
 
 *.pt
 combined_isic_binary/
+
+# Office temp/lock files
+~$*
