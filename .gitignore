@@ -33,3 +33,9 @@ Thumbs.db
 node_modules/
 .next/
 dist/
+
+# Keep env templates
+!.env.example
+
+# Third-party reference papers (kept locally only; see README "References")
+references/

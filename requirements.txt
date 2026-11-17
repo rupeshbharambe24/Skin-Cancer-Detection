@@ -1,0 +1,14 @@
+# Training notebooks + Streamlit app
+torch
+torchvision
+timm
+numpy
+pandas
+scikit-learn
+matplotlib
+seaborn
+pillow
+tqdm
+streamlit
+# optional: DermaMNIST baseline notebook
+medmnist
